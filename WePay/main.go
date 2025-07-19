@@ -4,7 +4,10 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"wepay/internal/repository"
 	"wepay/internal/repository/dao"
+	"wepay/internal/service"
+	"wepay/internal/web"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -13,9 +16,11 @@ import (
 )
 
 func main() {
-	_ = initDB()
+	db := initDB()
 	server := initWebServer()
+	transferHandler := initTransfer(db)
 
+	transferHandler.RegisterRoutes(server.Group("/transfer"))
 	// 定义路由
 	server.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -24,11 +29,7 @@ func main() {
 		})
 	})
 
-	// 启动服务器
-	port := ":8080"
-	if err := server.Run(port); err != nil {
-		panic("Failed to start server: " + err.Error())
-	}
+	_ = server.Run(":8080") // listen and serve on 8080
 }
 
 func initDB() *gorm.DB {
@@ -62,4 +63,11 @@ func initWebServer() *gin.Engine {
 	}))
 
 	return server
+}
+
+func initTransfer(db *gorm.DB) *web.TransferHandler {
+	dao := dao.NewTransferDao(db)
+	repo := repository.NewTransferRepository(dao)
+	svc := service.NewTransferService(repo)
+	return web.NewTransferHandler(svc)
 }
