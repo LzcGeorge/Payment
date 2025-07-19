@@ -11,15 +11,19 @@ import (
 )
 
 type TransferHandler struct {
-	svc *service.TransferService
+	svc    *service.TransferService
+	client Client
 }
 
-func NewTransferHandler(svc *service.TransferService) *TransferHandler {
+func NewTransferHandler(svc *service.TransferService, client Client) *TransferHandler {
 	return &TransferHandler{
-		svc: svc,
+		svc:    svc,
+		client: client,
 	}
 }
 
+// RegisterRoutes registers the HTTP routes for transfer operations on the provided router group.
+// Currently, it registers a POST endpoint at "/to_user" that triggers the InitiateTransfer handler method.
 func (t *TransferHandler) RegisterRoutes(ug *gin.RouterGroup) {
 	ug.POST("/to_user", t.InitiateTransfer)
 }
@@ -45,7 +49,14 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	notify_url := os.Getenv("WECHAT_NOTIFY_URL")
 	user_recv_perception := "现金红包" // 用户收款时感知到的收款原因将根据转账场景自动展示默认内容。
 
-	mchConfig, appid, err := t.getMchConfigAndAppid()
+	mchConfig, err := wxpay_utility.CreateMchConfig(
+		t.client.Mchid,
+		t.client.CertificateSerialNo,
+		t.client.PrivateKeyPath,
+		t.client.WechatPayPublicKeyId,
+		t.client.WechatPayPublicKeyPath,
+	)
+
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -57,7 +68,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	// 构造 TransferToUserRequest
 	request := &service.TransferToUserRequest{
 		// 商家
-		Appid:              core.String(appid), // 小程序与商户关联的appid
+		Appid:              core.String(t.client.Appid), // 小程序与商户关联的appid
 		OutBillNo:          core.String(outbillno),
 		TransferSceneId:    core.String(transfer_scene_id),
 		Openid:             core.String(openid),
@@ -67,7 +78,8 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		NotifyUrl:          core.String(notify_url),
 		UserRecvPerception: core.String(user_recv_perception),
 	}
-	// func (svc *TransferService) TransferToUser(config *wxpay_utility.MchConfig, request *TransferToUserRequest) (response *TransferToUserResponse, err error) {
+
+	// 发起转账
 	response, err := t.svc.TransferToUser(mchConfig, request)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -86,34 +98,4 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, gin.H{"code": 99, "msg": "未知状态"})
 	}
 
-}
-
-func (t *TransferHandler) getMchConfigAndAppid() (mch *wxpay_utility.MchConfig, appid string, err error) {
-
-	appid = "test_appid"
-	mchId := "test_mch_id"
-	certificateSerialNo := "test_serial_no"
-	privateKeyPath := "./certs/test_private_key.pem"
-	wechatPayPublicKeyId := "test_public_key_id"
-	wechatPayPublicKeyPath := "./certs/test_public_key.pem"
-
-	// 从环境变量获取配置，方便测试时切换
-
-	mchId = os.Getenv("WECHAT_MCH_ID")
-	if mchId != "" {
-		certificateSerialNo = os.Getenv("WECHAT_CERT_SERIAL_NO")
-		privateKeyPath = os.Getenv("WECHAT_PRIVATE_KEY_PATH")
-		wechatPayPublicKeyId = os.Getenv("WECHAT_PUBLIC_KEY_ID")
-		wechatPayPublicKeyPath = os.Getenv("WECHAT_PUBLIC_KEY_PATH")
-	}
-	mchId = "test_mch_id" // 测试用的商户号
-	mch, err = wxpay_utility.CreateMchConfig(
-		mchId,
-		certificateSerialNo,
-		privateKeyPath,
-		wechatPayPublicKeyId,
-		wechatPayPublicKeyPath,
-	)
-
-	return mch, appid, err
 }

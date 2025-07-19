@@ -18,7 +18,9 @@ import (
 func main() {
 	db := initDB()
 	server := initWebServer()
-	transferHandler := initTransfer(db)
+	// appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath
+	client := web.NewClient("wxdsfahgf234sd", "123523432", "ajkhyuiKJSAHDn124fsadasda", "certs/private_key.pem", "adsbvcretgnfsde", "certs/public_key.pem")
+	transferHandler := initTransfer(db, client)
 
 	transferHandler.RegisterRoutes(server.Group("/transfer"))
 	// 定义路由
@@ -65,9 +67,9 @@ func initWebServer() *gin.Engine {
 	return server
 }
 
-func initTransfer(db *gorm.DB) *web.TransferHandler {
+func initTransfer(db *gorm.DB, client *web.Client) *web.TransferHandler {
 	dao := dao.NewTransferDao(db)
 	repo := repository.NewTransferRepository(dao)
 	svc := service.NewTransferService(repo)
-	return web.NewTransferHandler(svc)
+	return web.NewTransferHandler(svc, *client)
 }
