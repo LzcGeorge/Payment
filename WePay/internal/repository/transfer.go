@@ -36,3 +36,19 @@ func (r *TransferRepository) UpdateTransferRequestStatus(ctx context.Context, ou
 func (r *TransferRepository) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
 	return r.dao.GetTransferStatus(ctx, outbillno)
 }
+
+func (r *TransferRepository) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+	record, err := r.dao.GetTransferRecord(ctx, outbillno)
+	if err != nil {
+		return domain.TransferRecord{}, err
+	}
+	return domain.TransferRecord{
+		OutBillNo: record.OutBillNo,
+		Openid:    record.Openid,
+		Amount:    record.Amount,
+		MchId:     record.MchId,
+		Remark:    record.Remark,
+		SceneId:   record.SceneId,
+		Status:    record.Status,
+	}, nil
+}

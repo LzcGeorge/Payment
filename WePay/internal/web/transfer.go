@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"errors"
+	"log"
 	"net/http"
 	"wepay/internal/domain"
 	"wepay/internal/service"
@@ -15,14 +16,16 @@ import (
 )
 
 type TransferHandler struct {
-	svc    *service.TransferService
-	client Client
+	svc     *service.TransferService
+	userSvc *service.UserService
+	client  Client
 }
 
-func NewTransferHandler(svc *service.TransferService, client Client) *TransferHandler {
+func NewTransferHandler(svc *service.TransferService, userSvc *service.UserService, client Client) *TransferHandler {
 	return &TransferHandler{
-		svc:    svc,
-		client: client,
+		svc:     svc,
+		userSvc: userSvc,
+		client:  client,
 	}
 }
 
@@ -32,6 +35,7 @@ func (t *TransferHandler) RegisterRoutes(ug *gin.RouterGroup) {
 	ug.POST("/to_user", t.InitiateTransfer)
 	ug.POST("/notify", t.TransferNotify)   // 微信支付的回调（手动模拟实现）
 	ug.POST("/confirm", t.ConfirmTransfer) // 确认转账
+	ug.GET("/amount", t.FetchAmount)       // 查询余额
 }
 
 func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
@@ -212,15 +216,29 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 		return
 	}
 
-	status, err := t.svc.GetTransferStatus(ctx, req.OutBillNo)
+	record, err := t.svc.GetTransferRecord(ctx, req.OutBillNo)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
-
-	if status == domain.TransferStatusSuccess {
+	if record.Status == domain.TransferStatusSuccess {
 		ctx.String(http.StatusOK, "")
+		// 如果状态为 SUCCESS，则更新用户余额
+		err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, 0)
+		}
 	} else {
 		ctx.String(http.StatusInternalServerError, "")
 	}
 
+}
+
+func (t *TransferHandler) FetchAmount(ctx *gin.Context) {
+	openid := ctx.Query("openid")
+	log.Println("openid", openid)
+	amount, err := t.userSvc.GetAmount(ctx, openid)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, 0)
+	}
+	ctx.JSON(http.StatusOK, amount)
 }

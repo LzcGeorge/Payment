@@ -10,7 +10,6 @@ Page({
 
   onLoad() {
     this.fetchBalance();
-    this.fetchLogs();
   },
 
   // 红包签到
@@ -30,7 +29,7 @@ Page({
         console.log(res);
         if (res.data && res.data.package_info) {
           wx.showToast({ title: res.data.msg || '签到成功', icon: 'success' });
-          this.data.out_bill_no = res.data.out_bill_no;
+          this.setData({out_bill_no: res.data.out_bill_no})
           console.log(this.data.out_bill_no);
         } else {
           wx.showToast({ title: res.data.msg || '签到失败', icon: 'none' });
@@ -55,15 +54,15 @@ Page({
       url: 'http://wepay.selfknow.cn/transfer/confirm',
       method: 'POST',
       data: {
-        out_bill_no: this.data.out_bill_no
+        out_bill_no: this.data.out_bill_no,
       },
       success: (res) => {
-        console.log(this.data.out_bill_no)
         if (res.statusCode === 200) {
           wx.showToast({ title: '转账已确认', icon: 'success' });
           // 这里可选择重新拉取余额、转账记录等
-          this.data.out_bill_no = ""
           this.fetchBalance();
+          this.setData({out_bill_no: ""})
+          
         } else {
           wx.showToast({ title: res.data.msg || '确认失败', icon: 'none' });
         }
@@ -81,7 +80,7 @@ Page({
         header: { 'content-type': 'application/json' },
         package: 'affffddafdfafddffda==',
         data: {
-          outbillno: payParams.out_bill_no
+          outbillno: payParams.out_bill_no,
         },
         success: (res) => {
           if (res.statusCode === 200) {
@@ -100,20 +99,15 @@ Page({
   fetchBalance() {
     const that = this;
     wx.request({
-      url: 'http://localhost:8080/user/balance?openid=' + that.data.openid,
+      url: 'http://wepay.selfknow.cn/transfer/amount?openid=' + that.data.openid,
+      method: 'GET',
+      header: { 'content-type': 'application/json' },
       success(res) {
-        that.setData({ balance: res.data.balance || 0 });
+        console.log(res);
+        that.setData({ balance: res.data || 0});
       }
     });
   },
 
-  fetchLogs() {
-    const that = this;
-    wx.request({
-      url: 'http://localhost:8080/transfer/logs?openid=' + that.data.openid,
-      success(res) {
-        that.setData({ transferLogs: res.data.data || [] });
-      }
-    });
-  }
+  
 })

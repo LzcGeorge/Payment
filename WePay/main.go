@@ -77,8 +77,13 @@ func initWebServer() *gin.Engine {
 }
 
 func initTransfer(db *gorm.DB, client *web.Client) *web.TransferHandler {
-	dao := dao.NewTransferDao(db)
-	repo := repository.NewTransferRepository(dao)
-	svc := service.NewTransferService(repo)
-	return web.NewTransferHandler(svc, *client)
+	transferDao := dao.NewTransferDao(db)
+	transferRepo := repository.NewTransferRepository(transferDao)
+	transferSvc := service.NewTransferService(transferRepo)
+
+	userDao := dao.NewUserDao(db)
+	userRepo := repository.NewUserRepository(userDao)
+	userSvc := service.NewUserService(userRepo)
+
+	return web.NewTransferHandler(transferSvc, userSvc, *client)
 }

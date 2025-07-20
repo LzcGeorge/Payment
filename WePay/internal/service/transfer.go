@@ -111,3 +111,7 @@ func (svc *TransferService) GetTransferStatus(ctx context.Context, outbillno str
 func (svc *TransferService) UpdateTransferStatus(ctx context.Context, outbillno, state string) error {
 	return svc.repo.UpdateTransferRequestStatus(ctx, outbillno, state)
 }
+
+func (svc *TransferService) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+	return svc.repo.GetTransferRecord(ctx, outbillno)
+}
