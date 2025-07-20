@@ -32,3 +32,7 @@ func (r *TransferRepository) CreateTransferRequest(ctx context.Context, req *dom
 func (r *TransferRepository) UpdateTransferRequestStatus(ctx context.Context, outbillno, state string) error {
 	return r.dao.UpdateTransferRequestStatus(ctx, outbillno, state)
 }
+
+func (r *TransferRepository) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
+	return r.dao.GetTransferStatus(ctx, outbillno)
+}

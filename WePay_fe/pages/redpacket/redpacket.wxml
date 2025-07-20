@@ -1,6 +1,7 @@
 <view class="container">
   <view class="title">当前余额：￥{{ balanceYuan }}</view>
   <button bindtap="onSignIn" loading="{{loading}}" type="primary">红包签到</button>
+  <button bindtap="onConfirmTransfer">确认转账</button>
   <view class="logs-title">转账记录：</view>
   <block wx:for="{{transferLogs}}" wx:key="out_bill_no">
     <view class="log-item">

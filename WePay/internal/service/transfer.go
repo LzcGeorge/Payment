@@ -95,23 +95,19 @@ func (svc *TransferService) GenerateOutBillNo(openid string, amount int64) strin
 	return fmt.Sprintf("Transfer_%v_%v_%v", openid, amount, strconv.FormatInt(time.Now().UnixNano(), 10))
 }
 
-func (svc *TransferService) AddTransferRequest(ctx context.Context, openid string, amount int64, remark, sceneId string) string {
-	outbillno := svc.GenerateOutBillNo(openid, amount) // 唯一流水号生成函数
-	req := &domain.TransferRecord{
-		OutBillNo: outbillno,
-		Openid:    openid,
-		Amount:    amount,
-		Remark:    remark,
-		SceneId:   sceneId,
-		Status:    domain.TransferStatusProcessing,
-	}
+func (svc *TransferService) AddTransferRequest(ctx context.Context, req *domain.TransferRecord) string {
+
 	err := svc.repo.CreateTransferRequest(ctx, req)
 	if err != nil {
 		log.Printf("Failed to insert into database for TransferRecord: %v", err)
 	}
-	return outbillno
+	return req.OutBillNo
 }
 
-func (svc *TransferService) TransferCallback(ctx context.Context, outbillno, state string) error {
+func (svc *TransferService) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
+	return svc.repo.GetTransferStatus(ctx, outbillno)
+}
+
+func (svc *TransferService) UpdateTransferStatus(ctx context.Context, outbillno, state string) error {
 	return svc.repo.UpdateTransferRequestStatus(ctx, outbillno, state)
 }

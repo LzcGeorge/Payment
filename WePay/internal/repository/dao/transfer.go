@@ -41,3 +41,9 @@ func (d *TransferDao) UpdateTransferRequestStatus(ctx context.Context, outbillno
 		},
 	).Error
 }
+
+func (d *TransferDao) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
+	var status string
+	err := d.db.Model(&TransferRequestRecord{}).Where("out_bill_no = ?", outbillno).Select("status").Scan(&status).Error
+	return status, err
+}

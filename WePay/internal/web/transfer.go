@@ -4,10 +4,9 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
+	"wepay/internal/domain"
 	"wepay/internal/service"
 	"wepay/internal/service/wxpay_utility"
 
@@ -31,7 +30,8 @@ func NewTransferHandler(svc *service.TransferService, client Client) *TransferHa
 // Currently, it registers a POST endpoint at "/to_user" that triggers the InitiateTransfer handler method.
 func (t *TransferHandler) RegisterRoutes(ug *gin.RouterGroup) {
 	ug.POST("/to_user", t.InitiateTransfer)
-	ug.POST("/notify", t.TransferNotify)
+	ug.POST("/notify", t.TransferNotify)   // 微信支付的回调（手动模拟实现）
+	ug.POST("/confirm", t.ConfirmTransfer) // 确认转账
 }
 
 func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
@@ -70,7 +70,15 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 
 	// 生成唯一outbillno并保存转账请求
 	outbillno := t.svc.GenerateOutBillNo(openid, amount)
-	t.svc.AddTransferRequest(ctx, openid, amount, remark, transfer_scene_id)
+	requestRecord := &domain.TransferRecord{
+		OutBillNo: outbillno,
+		Openid:    openid,
+		MchId:     t.client.Mchid,
+		Amount:    amount,
+		Remark:    remark,
+		Status:    domain.TransferStatusProcessing,
+	}
+	t.svc.AddTransferRequest(ctx, requestRecord)
 
 	// 构造 TransferToUserRequest
 	request := &service.TransferToUserRequest{
@@ -88,24 +96,16 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	}
 
 	// 发起转账
-	response, err := t.svc.TransferToUser(mchConfig, request)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+	_, err = t.svc.TransferToUser(mchConfig, request)
+	response := &service.TransferToUserResponse{
+		OutBillNo:      core.String(outbillno),
+		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
+		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
+		State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
+		PackageInfo:    core.String("affffddafdfafddffda=="),
 	}
 
-	log.Printf("TransferToUser response: %+v", response)
-	switch response.State {
-	case service.TRANSFERBILLSTATUS_SUCCESS.Ptr():
-		ctx.JSON(http.StatusOK, gin.H{"code": 0, "msg": "转账成功", "data": response})
-	case service.TRANSFERBILLSTATUS_FAIL.Ptr():
-		ctx.JSON(http.StatusOK, gin.H{"code": 1, "msg": "转账失败", "detail": response.PackageInfo})
-	case service.TRANSFERBILLSTATUS_PROCESSING.Ptr():
-		ctx.JSON(http.StatusOK, gin.H{"code": 2, "msg": "转账处理中"})
-	default:
-		ctx.JSON(http.StatusOK, gin.H{"code": 99, "msg": "未知状态"})
-	}
-
+	ctx.JSON(http.StatusOK, response)
 }
 
 type NotifyResp struct {
@@ -139,69 +139,22 @@ type DecryptResult struct {
 
 func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
 	// 1. 构造回调体
-	var resp NotifyResp
+	var resp struct {
+		OutBillNo string `json:"out_bill_no"`
+	}
 	if err := ctx.ShouldBindJSON(&resp); err != nil {
 		ctx.JSON(400, gin.H{"code": "FAIL", "message": "invalid body"})
 		return
 	}
 
-	// 2. 校验签名（开发环境可以不做/或模拟通过）
-	// 3. 解密 resource.ciphertext
-
-	plain, err := DecryptNotifyResource(
-		t.client.WechatPayPublicKeyPath,
-		resp.Resource.AssociatedData,
-		resp.Resource.Nonce,
-		resp.Resource.Ciphertext,
-	)
+	// 查询 requestRecord 状态，如果状态为 SUCCESS，则返回成功
+	err := t.svc.UpdateTransferStatus(ctx, resp.OutBillNo, domain.TransferStatusSuccess)
 	if err != nil {
-		ctx.JSON(400, gin.H{"code": "FAIL", "message": "解密失败"})
+		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	var order DecryptResult
-	if err := json.Unmarshal([]byte(plain), &order); err != nil {
-		ctx.JSON(400, gin.H{"code": "FAIL", "message": "解密数据不合法"})
-		return
-	}
-
-	err = t.svc.TransferCallback(ctx, order.OutBillNo, order.State)
-	log.Printf("TransferCallback: %+v", order)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 2. 校验签名（开发环境可以不做/或模拟通过）
-	// 3. 解密 resource.ciphertext
-	// apiV3Key := os.Getenv("WECHAT_APIV3_KEY")
-	// plain, err := service.DecryptNotifyResource(
-	// 	apiV3Key,
-	// 	req.Resource.AssociatedData,
-	// 	req.Resource.Nonce,
-	// 	req.Resource.Ciphertext,
-	// )
-	// if err != nil {
-	// 	ctx.JSON(400, gin.H{"code": "FAIL", "message": "解密失败"})
-	// 	return
-	// }
-
-	// var order DecryptResult
-	// if err := json.Unmarshal([]byte(plain), &order); err != nil {
-	// 	ctx.JSON(400, gin.H{"code": "FAIL", "message": "解密数据不合法"})
-	// 	return
-	// }
-
-	// order := DecryptResult{
-	// // 4. 幂等落库（防重复），状态流转，用户余额变更
-	// err = t.svc.OnTransferNotify(ctx, &order)
-	// if err != nil {
-	// 	ctx.JSON(500, gin.H{"code": "FAIL", "message": "落库失败"})
-	// 	return
-	// }
-
-	// 5. 返回成功（微信要求200或204，无需body）
-	ctx.String(200, "")
+	ctx.String(http.StatusOK, "")
 }
 
 // 解密 AES-256-GCM 回调
@@ -245,5 +198,29 @@ func DecryptNotifyResource(apiV3Key, associatedData, nonce, ciphertext string) (
 		return "", err
 	}
 	return string(plain), nil
+
+}
+
+// 判断 notify 是不是来了
+
+func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
+	var req struct {
+		OutBillNo string `form:"out_bill_no" json:"out_bill_no" binding:"required"`
+	}
+	if err := ctx.ShouldBind(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法: " + err.Error()})
+		return
+	}
+
+	status, err := t.svc.GetTransferStatus(ctx, req.OutBillNo)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, err.Error())
+	}
+
+	if status == domain.TransferStatusSuccess {
+		ctx.String(http.StatusOK, "")
+	} else {
+		ctx.String(http.StatusInternalServerError, "")
+	}
 
 }
