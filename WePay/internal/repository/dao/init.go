@@ -5,7 +5,7 @@ import (
 )
 
 func InitTable(db *gorm.DB) error {
-	return db.AutoMigrate(&User{}, &TransferRequest{})
+	return db.AutoMigrate(&User{}, &TransferRequestRecord{})
 }
 
 func TruncateTable(db *gorm.DB, tableName string) error {

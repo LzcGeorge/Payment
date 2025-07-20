@@ -7,14 +7,15 @@ import (
 	"gorm.io/gorm"
 )
 
-type TransferRequest struct {
+type TransferRequestRecord struct {
 	ID        int64 `gorm:"primaryKey;autoIncrement"`
 	OutBillNo string
 	Openid    string
+	MchId     string
 	Amount    int64
 	Remark    string
 	SceneId   string
-	Status    int // 0: INIT, 1: SUCCESS, 2: FAIL
+	Status    string
 	Ctime     time.Time
 	Utime     time.Time
 }
@@ -27,13 +28,13 @@ func NewTransferDao(db *gorm.DB) *TransferDao {
 	return &TransferDao{db: db}
 }
 
-func (d *TransferDao) CreateTransferRequest(ctx context.Context, req *TransferRequest) error {
+func (d *TransferDao) CreateTransferRequestRecord(ctx context.Context, req *TransferRequestRecord) error {
 	return d.db.Create(req).Error
 }
 
 // UpdateTransferRequestStatus 修改 Status
-func (d *TransferDao) UpdateTransferRequestStatus(ctx context.Context, outbillno string, status int) error {
-	return d.db.Model(&TransferRequest{}).Where("out_bill_no = ?", outbillno).Updates(
+func (d *TransferDao) UpdateTransferRequestStatus(ctx context.Context, outbillno string, status string) error {
+	return d.db.Model(&TransferRequestRecord{}).Where("out_bill_no = ?", outbillno).Updates(
 		map[string]interface{}{
 			"status": status,
 			"utime":  time.Now(),

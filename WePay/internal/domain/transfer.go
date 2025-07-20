@@ -1,18 +1,23 @@
 package domain
 
-// domain/transfer_request.go
-type TransferRequest struct {
+type TransferRecord struct {
 	ID        int64
-	OutBillNo string
-	Openid    string
-	Amount    int64
-	Remark    string
-	SceneId   string
-	Status    int // 0: INIT, 1: SUCCESS, 2: FAIL
+	OutBillNo string // 转账单号
+	Openid    string // 转账用户ID
+	MchId     string // 商户ID
+	Amount    int64  // 转账金额
+	Remark    string // 转账备注
+	SceneId   string // 转账场景ID
+	Status    string // 转账状态
 }
 
 const (
-	StatusInit = iota
-	StatusSuccess
-	StatusFail
+	TransferStatusAccepted        = "ACCEPTED"
+	TransferStatusProcessing      = "PROCESSING"
+	TransferStatusWaitUserConfirm = "WAIT_USER_CONFIRM"
+	TransferStatusTransfering     = "TRANSFERING"
+	TransferStatusSuccess         = "SUCCESS"
+	TransferStatusFail            = "FAIL"
+	TransferStatusCanceling       = "CANCELING"
+	TransferStatusCancelled       = "CANCELLED"
 )

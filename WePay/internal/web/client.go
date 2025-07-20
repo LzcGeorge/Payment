@@ -7,9 +7,10 @@ type Client struct {
 	PrivateKeyPath         string
 	WechatPayPublicKeyId   string
 	WechatPayPublicKeyPath string
+	NotifyUrl              string
 }
 
-func NewClient(appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath string) *Client {
+func NewClient(appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath, notifyUrl string) *Client {
 	return &Client{
 		Appid:                  appid,
 		Mchid:                  mchid,
@@ -17,5 +18,6 @@ func NewClient(appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPubli
 		PrivateKeyPath:         privateKeyPath,
 		WechatPayPublicKeyId:   wechatPayPublicKeyId,
 		WechatPayPublicKeyPath: wechatPayPublicKeyPath,
+		NotifyUrl:              notifyUrl,
 	}
 }

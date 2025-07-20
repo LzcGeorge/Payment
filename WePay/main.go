@@ -19,7 +19,15 @@ func main() {
 	db := initDB()
 	server := initWebServer()
 	// appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath
-	client := web.NewClient("wxdsfahgf234sd", "123523432", "ajkhyuiKJSAHDn124fsadasda", "certs/private_key.pem", "adsbvcretgnfsde", "certs/public_key.pem")
+	client := web.NewClient(
+		"wxdsfahgf234sd",            // appid
+		"123523432",                 // mchid
+		"ajkhyuiKJSAHDn124fsadasda", // certificateSerialNo
+		"certs/private_key.pem",     // privateKeyPath
+		"adsbvcretgnfsde",           // wechatPayPublicKeyId
+		"certs/public_key.pem",      // wechatPayPublicKeyPath
+		"http://wepay.selfknow.cn",  // notifyUrl
+	)
 	transferHandler := initTransfer(db, client)
 
 	transferHandler.RegisterRoutes(server.Group("/transfer"))

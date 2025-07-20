@@ -1,0 +1,19 @@
+.container {
+  padding: 30rpx;
+}
+.title {
+  font-size: 32rpx;
+  font-weight: bold;
+  margin-bottom: 20rpx;
+}
+.logs-title {
+  margin-top: 30rpx;
+  font-size: 28rpx;
+  font-weight: bold;
+}
+.log-item {
+  font-size: 24rpx;
+  margin: 10rpx 0;
+  display: flex;
+  justify-content: space-between;
+}

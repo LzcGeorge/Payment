@@ -97,17 +97,21 @@ func (svc *TransferService) GenerateOutBillNo(openid string, amount int64) strin
 
 func (svc *TransferService) AddTransferRequest(ctx context.Context, openid string, amount int64, remark, sceneId string) string {
 	outbillno := svc.GenerateOutBillNo(openid, amount) // 唯一流水号生成函数
-	req := &domain.TransferRequest{
+	req := &domain.TransferRecord{
 		OutBillNo: outbillno,
 		Openid:    openid,
 		Amount:    amount,
 		Remark:    remark,
 		SceneId:   sceneId,
-		Status:    domain.StatusInit,
+		Status:    domain.TransferStatusProcessing,
 	}
 	err := svc.repo.CreateTransferRequest(ctx, req)
 	if err != nil {
-		log.Printf("Failed to insert into database for TransferRequest: %v", err)
+		log.Printf("Failed to insert into database for TransferRecord: %v", err)
 	}
 	return outbillno
+}
+
+func (svc *TransferService) TransferCallback(ctx context.Context, outbillno, state string) error {
+	return svc.repo.UpdateTransferRequestStatus(ctx, outbillno, state)
 }

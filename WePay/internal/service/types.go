@@ -35,6 +35,7 @@ type TransferToUserRequest struct {
 	OutBillNo                *string                   `json:"out_bill_no,omitempty"`
 	TransferSceneId          *string                   `json:"transfer_scene_id,omitempty"`
 	Openid                   *string                   `json:"openid,omitempty"`
+	MchId                    *string                   `json:"mch_id,omitempty"`
 	UserName                 *string                   `json:"user_name,omitempty"`
 	TransferAmount           *int64                    `json:"transfer_amount,omitempty"`
 	TransferRemark           *string                   `json:"transfer_remark,omitempty"`
