@@ -168,7 +168,7 @@ func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
 	}
 
 	// 更新	 requestRecord 状态
-	err := t.svc.UpdateTransferStatus(ctx, resp.OutBillNo, domain.TransferStatusSuccess)
+	err := t.svc.UpdateTransferStatus(ctx, resp.OutBillNo, domain.TransferStatusWaitUserConfirm)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
@@ -238,13 +238,23 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
-	if record.Status == domain.TransferStatusSuccess {
+	if record.Status == domain.TransferStatusWaitUserConfirm {
 		ctx.String(http.StatusOK, "")
-		// 如果状态为 SUCCESS，则更新用户余额
+		// 如果状态为 TransferStatusWaitUserConfirm，则更新用户余额
+
 		err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, 0)
+			ctx.JSON(http.StatusInternalServerError, "")
+			log.Printf("更新用户余额失败: %v", err)
+			return
 		}
+		err = t.svc.UpdateTransferStatus(ctx, record.OutBillNo, domain.TransferStatusSuccess)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, "")
+			log.Printf("更新转账状态失败: %v", err)
+			return
+		}
+		ctx.JSON(http.StatusOK, gin.H{"message": "转账确认成功"})
 	} else {
 		ctx.String(http.StatusInternalServerError, "")
 	}
