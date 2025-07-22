@@ -11,8 +11,8 @@ type Client struct {
 	NotifyUrl              string
 }
 
-func NewClient(appid, mchid, apiKey, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath, notifyUrl string) *Client {
-	return &Client{
+func NewClient(appid, mchid, apiKey, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath, notifyUrl string) Client {
+	return Client{
 		Appid:                  appid,
 		Mchid:                  mchid,
 		ApiKey:                 apiKey,

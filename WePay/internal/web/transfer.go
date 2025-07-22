@@ -16,12 +16,12 @@ import (
 )
 
 type TransferHandler struct {
-	svc     *service.TransferService
-	userSvc *service.UserService
+	svc     service.TransferService
+	userSvc service.UserService
 	client  Client
 }
 
-func NewTransferHandler(svc *service.TransferService, userSvc *service.UserService, client Client) *TransferHandler {
+func NewTransferHandler(svc service.TransferService, userSvc service.UserService, client Client) *TransferHandler {
 	return &TransferHandler{
 		svc:     svc,
 		userSvc: userSvc,
@@ -82,7 +82,11 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		Remark:    remark,
 		Status:    domain.TransferStatusProcessing,
 	}
-	t.svc.AddTransferRequest(ctx, requestRecord)
+	err = t.svc.AddTransferRequest(ctx, requestRecord)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 
 	// 构造 TransferToUserRequest
 	request := &service.TransferToUserRequest{
@@ -100,14 +104,18 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	}
 
 	// 发起转账
-	_, err = t.svc.TransferToUser(mchConfig, request)
-	response := &service.TransferToUserResponse{
-		OutBillNo:      core.String(outbillno),
-		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
-		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-		State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
-		PackageInfo:    core.String("affffddafdfafddffda=="),
+	response, err := t.svc.TransferToUser(mchConfig, request)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
 	}
+	// response := &service.TransferToUserResponse{
+	// 	OutBillNo:      core.String(outbillno),
+	// 	TransferBillNo: core.String("1330000071100999991182020050700019480001"),
+	// 	CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
+	// 	State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
+	// 	PackageInfo:    core.String("affffddafdfafddffda=="),
+	// }
 
 	ctx.JSON(http.StatusOK, response)
 }

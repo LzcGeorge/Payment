@@ -15,18 +15,27 @@ import (
 	"wepay/internal/service/wxpay_utility"
 )
 
-type TransferService struct {
-	repo *repository.TransferRepository
+type TransferService interface {
+	TransferToUser(config *wxpay_utility.MchConfig, request *TransferToUserRequest) (response *TransferToUserResponse, err error)
+	GenerateOutBillNo(openid string, amount int64) string
+	AddTransferRequest(ctx context.Context, req *domain.TransferRecord) error
+	GetTransferStatus(ctx context.Context, outbillno string) (string, error)
+	UpdateTransferStatus(ctx context.Context, outbillno, state string) error
+	GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error)
 }
 
-func NewTransferService(repo *repository.TransferRepository) *TransferService {
-	return &TransferService{
+type transferService struct {
+	repo repository.TransferRepository
+}
+
+func NewTransferService(repo repository.TransferRepository) TransferService {
+	return &transferService{
 		repo: repo,
 	}
 }
 
 // TransferToUser 发起转账到用户
-func (svc *TransferService) TransferToUser(config *wxpay_utility.MchConfig, request *TransferToUserRequest) (response *TransferToUserResponse, err error) {
+func (svc *transferService) TransferToUser(config *wxpay_utility.MchConfig, request *TransferToUserRequest) (response *TransferToUserResponse, err error) {
 	const (
 		host   = "https://api.mch.weixin.qq.com"
 		method = "POST"
@@ -91,27 +100,27 @@ func (svc *TransferService) TransferToUser(config *wxpay_utility.MchConfig, requ
 	}
 }
 
-func (svc *TransferService) GenerateOutBillNo(openid string, amount int64) string {
+func (svc *transferService) GenerateOutBillNo(openid string, amount int64) string {
 	return fmt.Sprintf("Transfer_%v_%v_%v", openid, amount, strconv.FormatInt(time.Now().UnixNano(), 10))
 }
 
-func (svc *TransferService) AddTransferRequest(ctx context.Context, req *domain.TransferRecord) string {
+func (svc *transferService) AddTransferRequest(ctx context.Context, req *domain.TransferRecord) error {
 
 	err := svc.repo.CreateTransferRequest(ctx, req)
 	if err != nil {
 		log.Printf("Failed to insert into database for TransferRecord: %v", err)
 	}
-	return req.OutBillNo
+	return err
 }
 
-func (svc *TransferService) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
+func (svc *transferService) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
 	return svc.repo.GetTransferStatus(ctx, outbillno)
 }
 
-func (svc *TransferService) UpdateTransferStatus(ctx context.Context, outbillno, state string) error {
+func (svc *transferService) UpdateTransferStatus(ctx context.Context, outbillno, state string) error {
 	return svc.repo.UpdateTransferRequestStatus(ctx, outbillno, state)
 }
 
-func (svc *TransferService) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+func (svc *transferService) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
 	return svc.repo.GetTransferRecord(ctx, outbillno)
 }

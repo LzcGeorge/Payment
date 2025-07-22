@@ -7,15 +7,22 @@ import (
 	"wepay/internal/repository/dao"
 )
 
-type TransferRepository struct {
-	dao *dao.TransferDao
+type TransferRepository interface {
+	CreateTransferRequest(ctx context.Context, req *domain.TransferRecord) error
+	UpdateTransferRequestStatus(ctx context.Context, outbillno, state string) error
+	GetTransferStatus(ctx context.Context, outbillno string) (string, error)
+	GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error)
 }
 
-func NewTransferRepository(dao *dao.TransferDao) *TransferRepository {
-	return &TransferRepository{dao: dao}
+type transferRepository struct {
+	dao dao.TransferDao
 }
 
-func (r *TransferRepository) CreateTransferRequest(ctx context.Context, req *domain.TransferRecord) error {
+func NewTransferRepository(dao dao.TransferDao) TransferRepository {
+	return &transferRepository{dao: dao}
+}
+
+func (r *transferRepository) CreateTransferRequest(ctx context.Context, req *domain.TransferRecord) error {
 	return r.dao.CreateTransferRequestRecord(ctx, &dao.TransferRequestRecord{
 		OutBillNo: req.OutBillNo,
 		Openid:    req.Openid,
@@ -29,15 +36,15 @@ func (r *TransferRepository) CreateTransferRequest(ctx context.Context, req *dom
 	})
 }
 
-func (r *TransferRepository) UpdateTransferRequestStatus(ctx context.Context, outbillno, state string) error {
+func (r *transferRepository) UpdateTransferRequestStatus(ctx context.Context, outbillno, state string) error {
 	return r.dao.UpdateTransferRequestStatus(ctx, outbillno, state)
 }
 
-func (r *TransferRepository) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
+func (r *transferRepository) GetTransferStatus(ctx context.Context, outbillno string) (string, error) {
 	return r.dao.GetTransferStatus(ctx, outbillno)
 }
 
-func (r *TransferRepository) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+func (r *transferRepository) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
 	record, err := r.dao.GetTransferRecord(ctx, outbillno)
 	if err != nil {
 		return domain.TransferRecord{}, err

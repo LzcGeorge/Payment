@@ -22,6 +22,14 @@ import (
 	"time"
 )
 
+type MchConfigInterface interface {
+	MchId() string
+	CertificateSerialNo() string
+	PrivateKey() *rsa.PrivateKey
+	WechatPayPublicKeyId() string
+	WechatPayPublicKey() *rsa.PublicKey
+}
+
 // MchConfig 商户信息配置，用于调用商户API
 type MchConfig struct {
 	mchId                      string
