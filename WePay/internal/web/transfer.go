@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"wepay/internal/domain"
@@ -38,12 +39,17 @@ func (t *TransferHandler) RegisterRoutes(ug *gin.RouterGroup) {
 	ug.GET("/amount", t.FetchAmount)       // 查询余额
 }
 
+func generatePackageInfo(openid string, timeStr string) string {
+	return fmt.Sprintf("PK%s-%s", openid, timeStr)
+}
+
 func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	// 用户传来的参数
 	var req struct {
 		Openid string `form:"openid" json:"openid" binding:"required"`
 		Amount int64  `form:"amount" json:"amount" binding:"required"`
-		Remark string `form:"remark" json:"remark"`
+		Remark string `json:"remark"`
+		Time   string `json:"time" binding:"required"`
 	}
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法: " + err.Error()})
@@ -52,6 +58,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	openid := req.Openid // 用户openid
 	amount := req.Amount // 转账金额，单位为 ”分“
 	remark := req.Remark // 转账备注
+	timeStr := req.Time  // 转账时间
 
 	// 商户的配置 MchConfig, appid， transfer_scene_id（转账场景）, notify_url（通知URL）, user_recv_perception（用户收款码）
 	transfer_scene_id := "1000" // 转账场景：现金营销
@@ -74,13 +81,15 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 
 	// 生成唯一outbillno并保存转账请求
 	outbillno := t.svc.GenerateOutBillNo(openid, amount)
+	packageInfo := generatePackageInfo(openid, timeStr)
 	requestRecord := &domain.TransferRecord{
-		OutBillNo: outbillno,
-		Openid:    openid,
-		MchId:     t.client.Mchid,
-		Amount:    amount,
-		Remark:    remark,
-		Status:    domain.TransferStatusProcessing,
+		OutBillNo:   outbillno,
+		Openid:      openid,
+		MchId:       t.client.Mchid,
+		PackageInfo: packageInfo,
+		Amount:      amount,
+		Remark:      remark,
+		Status:      domain.TransferStatusProcessing,
 	}
 	err = t.svc.AddTransferRequest(ctx, requestRecord)
 	if err != nil {
@@ -104,18 +113,17 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	}
 
 	// 发起转账
-	response, err := t.svc.TransferToUser(mchConfig, request)
+	_, err = t.svc.TransferToUser(mchConfig, request)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		log.Println("post to wx error:", err)
 	}
-	// response := &service.TransferToUserResponse{
-	// 	OutBillNo:      core.String(outbillno),
-	// 	TransferBillNo: core.String("1330000071100999991182020050700019480001"),
-	// 	CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-	// 	State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
-	// 	PackageInfo:    core.String("affffddafdfafddffda=="),
-	// }
+	response := &service.TransferToUserResponse{
+		OutBillNo:      core.String(outbillno),
+		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
+		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
+		State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
+		PackageInfo:    core.String(packageInfo),
+	}
 
 	ctx.JSON(http.StatusOK, response)
 }
@@ -152,14 +160,14 @@ type DecryptResult struct {
 func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
 	// 1. 构造回调体
 	var resp struct {
-		OutBillNo string `json:"out_bill_no"`
+		OutBillNo string `json:"out_bill_no"  binding:"required"`
 	}
 	if err := ctx.ShouldBindJSON(&resp); err != nil {
 		ctx.JSON(400, gin.H{"code": "FAIL", "message": "invalid body"})
 		return
 	}
 
-	// 查询 requestRecord 状态，如果状态为 SUCCESS，则返回成功
+	// 更新	 requestRecord 状态
 	err := t.svc.UpdateTransferStatus(ctx, resp.OutBillNo, domain.TransferStatusSuccess)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
@@ -217,14 +225,16 @@ func DecryptNotifyResource(apiV3Key, associatedData, nonce, ciphertext string) (
 
 func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 	var req struct {
-		OutBillNo string `form:"out_bill_no" json:"out_bill_no" binding:"required"`
+		MchId       string `json:"mch_id" binding:"required"`
+		Appid       string `json:"appid" binding:"required"`
+		PackageInfo string `json:"package_info" binding:"required"`
 	}
 	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法: " + err.Error()})
 		return
 	}
 
-	record, err := t.svc.GetTransferRecord(ctx, req.OutBillNo)
+	record, err := t.svc.GetTransferRecordByPackageInfo(ctx, req.PackageInfo)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}

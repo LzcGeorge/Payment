@@ -2,6 +2,6 @@
 
   <view class="title">当前余额：￥{{ balance }}</view>
   <button bindtap="onSignIn" loading="{{loading}}" type="primary">红包签到</button>
-  <button bindtap="onConfirmTransfer" disabled="{{!out_bill_no}}">确认转账</button>
+  <button bindtap="onConfirmTransfer" disabled="{{!package_info}}">确认转账</button>
  
 </view>

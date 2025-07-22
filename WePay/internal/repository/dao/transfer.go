@@ -11,20 +11,22 @@ type TransferDao interface {
 	CreateTransferRequestRecord(ctx context.Context, req *TransferRequestRecord) error
 	UpdateTransferRequestStatus(ctx context.Context, outbillno string, status string) error
 	GetTransferStatus(ctx context.Context, outbillno string) (string, error)
-	GetTransferRecord(ctx context.Context, outbillno string) (TransferRequestRecord, error)
+	GetTransferRecordByOutBillNo(ctx context.Context, outbillno string) (TransferRequestRecord, error)
+	GetTransferRecordByPackageInfo(ctx context.Context, packageInfo string) (TransferRequestRecord, error)
 }
 
 type TransferRequestRecord struct {
-	ID        int64 `gorm:"primaryKey;autoIncrement"`
-	OutBillNo string
-	Openid    string
-	MchId     string
-	Amount    int64
-	Remark    string
-	SceneId   string
-	Status    string
-	Ctime     time.Time
-	Utime     time.Time
+	ID          int64 `gorm:"primaryKey;autoIncrement"`
+	OutBillNo   string
+	Openid      string
+	MchId       string
+	Amount      int64
+	Remark      string
+	SceneId     string
+	Status      string
+	PackageInfo string
+	Ctime       time.Time
+	Utime       time.Time
 }
 
 type GormTransferDao struct {
@@ -55,8 +57,14 @@ func (d *GormTransferDao) GetTransferStatus(ctx context.Context, outbillno strin
 	return status, err
 }
 
-func (d *GormTransferDao) GetTransferRecord(ctx context.Context, outbillno string) (TransferRequestRecord, error) {
+func (d *GormTransferDao) GetTransferRecordByOutBillNo(ctx context.Context, outbillno string) (TransferRequestRecord, error) {
 	var record TransferRequestRecord
 	err := d.db.Model(&TransferRequestRecord{}).Where("out_bill_no = ?", outbillno).First(&record).Error
+	return record, err
+}
+
+func (d *GormTransferDao) GetTransferRecordByPackageInfo(ctx context.Context, packageInfo string) (TransferRequestRecord, error) {
+	var record TransferRequestRecord
+	err := d.db.Model(&TransferRequestRecord{}).Where("package_info = ?", packageInfo).First(&record).Error
 	return record, err
 }

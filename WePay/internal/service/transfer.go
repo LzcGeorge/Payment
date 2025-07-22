@@ -21,7 +21,8 @@ type TransferService interface {
 	AddTransferRequest(ctx context.Context, req *domain.TransferRecord) error
 	GetTransferStatus(ctx context.Context, outbillno string) (string, error)
 	UpdateTransferStatus(ctx context.Context, outbillno, state string) error
-	GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error)
+	GetTransferRecordByOutBillNo(ctx context.Context, outbillno string) (domain.TransferRecord, error)
+	GetTransferRecordByPackageInfo(ctx context.Context, packageInfo string) (domain.TransferRecord, error)
 }
 
 type transferService struct {
@@ -121,6 +122,10 @@ func (svc *transferService) UpdateTransferStatus(ctx context.Context, outbillno,
 	return svc.repo.UpdateTransferRequestStatus(ctx, outbillno, state)
 }
 
-func (svc *transferService) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
-	return svc.repo.GetTransferRecord(ctx, outbillno)
+func (svc *transferService) GetTransferRecordByOutBillNo(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+	return svc.repo.GetTransferRecordByOutBillNo(ctx, outbillno)
+}
+
+func (svc *transferService) GetTransferRecordByPackageInfo(ctx context.Context, packageInfo string) (domain.TransferRecord, error) {
+	return svc.repo.GetTransferRecordByPackageInfo(ctx, packageInfo)
 }

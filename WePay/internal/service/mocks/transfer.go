@@ -71,19 +71,34 @@ func (mr *MockTransferServiceMockRecorder) GenerateOutBillNo(openid, amount any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateOutBillNo", reflect.TypeOf((*MockTransferService)(nil).GenerateOutBillNo), openid, amount)
 }
 
-// GetTransferRecord mocks base method.
-func (m *MockTransferService) GetTransferRecord(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
+// GetTransferRecordByOutBillNo mocks base method.
+func (m *MockTransferService) GetTransferRecordByOutBillNo(ctx context.Context, outbillno string) (domain.TransferRecord, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransferRecord", ctx, outbillno)
+	ret := m.ctrl.Call(m, "GetTransferRecordByOutBillNo", ctx, outbillno)
 	ret0, _ := ret[0].(domain.TransferRecord)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetTransferRecord indicates an expected call of GetTransferRecord.
-func (mr *MockTransferServiceMockRecorder) GetTransferRecord(ctx, outbillno any) *gomock.Call {
+// GetTransferRecordByOutBillNo indicates an expected call of GetTransferRecordByOutBillNo.
+func (mr *MockTransferServiceMockRecorder) GetTransferRecordByOutBillNo(ctx, outbillno any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferRecord", reflect.TypeOf((*MockTransferService)(nil).GetTransferRecord), ctx, outbillno)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferRecordByOutBillNo", reflect.TypeOf((*MockTransferService)(nil).GetTransferRecordByOutBillNo), ctx, outbillno)
+}
+
+// GetTransferRecordByPackageInfo mocks base method.
+func (m *MockTransferService) GetTransferRecordByPackageInfo(ctx context.Context, packageInfo string) (domain.TransferRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTransferRecordByPackageInfo", ctx, packageInfo)
+	ret0, _ := ret[0].(domain.TransferRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTransferRecordByPackageInfo indicates an expected call of GetTransferRecordByPackageInfo.
+func (mr *MockTransferServiceMockRecorder) GetTransferRecordByPackageInfo(ctx, packageInfo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferRecordByPackageInfo", reflect.TypeOf((*MockTransferService)(nil).GetTransferRecordByPackageInfo), ctx, packageInfo)
 }
 
 // GetTransferStatus mocks base method.

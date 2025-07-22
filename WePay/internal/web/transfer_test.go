@@ -41,6 +41,7 @@ func TestInitiateTransfer(t *testing.T) {
 					State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
 					PackageInfo:    core.String("affffddafdfafddffda=="),
 				}, nil)
+
 				return transferSvc
 			},
 			wantCode: http.StatusOK,

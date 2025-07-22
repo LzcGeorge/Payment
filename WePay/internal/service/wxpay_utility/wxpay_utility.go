@@ -32,13 +32,13 @@ type MchConfigInterface interface {
 
 // MchConfig 商户信息配置，用于调用商户API
 type MchConfig struct {
-	mchId                      string
-	certificateSerialNo        string
-	privateKeyFilePath         string
-	wechatPayPublicKeyId       string
-	wechatPayPublicKeyFilePath string
-	privateKey                 *rsa.PrivateKey
-	wechatPayPublicKey         *rsa.PublicKey
+	mchId                      string          // 商户号
+	certificateSerialNo        string          // 商户API证书序列号
+	privateKeyFilePath         string          // 商户API证书对应的私钥文件路径
+	wechatPayPublicKeyId       string          // 微信支付公钥ID
+	wechatPayPublicKeyFilePath string          // 微信支付公钥文件路径
+	privateKey                 *rsa.PrivateKey // 商户API证书对应的私钥
+	wechatPayPublicKey         *rsa.PublicKey  // 微信支付公钥
 }
 
 // MchId 商户号
