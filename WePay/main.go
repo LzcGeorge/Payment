@@ -7,6 +7,7 @@ import (
 	"wepay/internal/repository"
 	"wepay/internal/repository/dao"
 	"wepay/internal/service"
+	"wepay/internal/service/wxpay_utility"
 	"wepay/internal/web"
 
 	"github.com/gin-contrib/cors"
@@ -18,17 +19,7 @@ import (
 func main() {
 	db := initDB()
 	server := initWebServer()
-	// appid, mchid, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath
-	client := web.NewClient(
-		"wxb9f4f763e5d4a6de",               // appid
-		"1368139500",                       // mchid
-		"GFDS8j98rewnmgl45wHTt980jg512abc", // apiKey
-		"ajkhyuiKJSAHDn124fsadasda",        // certificateSerialNo
-		"certs/private_key.pem",            // privateKeyPath
-		"adsbvcretgnfsde",                  // wechatPayPublicKeyId
-		"certs/public_key.pem",             // wechatPayPublicKeyPath
-		"http://wepay.selfknow.cn",         // notifyUrl
-	)
+	client := initClient()
 	transferHandler := initTransfer(db, client)
 
 	transferHandler.RegisterRoutes(server.Group("/transfer"))
@@ -74,6 +65,24 @@ func initWebServer() *gin.Engine {
 	}))
 
 	return server
+}
+
+func initClient() web.Client {
+	mchConfig, err := wxpay_utility.CreateMchConfig(
+		"1368139500",                // mchid
+		"ajkhyuiKJSAHDn124fsadasda", // certificateSerialNo
+		"certs/private_key.pem",     // privateKeyPath
+		"adsbvcretgnfsde",           // wechatPayPublicKeyId
+		"certs/public_key.pem",      // wechatPayPublicKeyPath
+	)
+	if err != nil {
+		panic(err)
+	}
+	return web.NewClient(
+		"wxb9f4f763e5d4a6de", // appid
+		mchConfig,
+		"http://wepay.selfknow.cn", // notifyUrl
+	)
 }
 
 func initTransfer(db *gorm.DB, client web.Client) *web.TransferHandler {

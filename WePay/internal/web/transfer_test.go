@@ -8,6 +8,7 @@ import (
 	"testing"
 	"wepay/internal/service"
 	svcmocks "wepay/internal/service/mocks"
+	"wepay/internal/service/wxpay_utility"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -28,18 +29,20 @@ func TestInitiateTransfer(t *testing.T) {
 			reqBody: `{
 				"openid": "o1234567890",
 				"amount": 100,
-				"remark": "test"
+				"remark": "test",
+				"time": "20200420130000"
 			}`,
 			mock: func(ctrl *gomock.Controller) service.TransferService {
 				transferSvc := svcmocks.NewMockTransferService(ctrl)
 				transferSvc.EXPECT().GenerateOutBillNo(gomock.Any(), gomock.Any()).Return("plfk2020042013")
 				transferSvc.EXPECT().AddTransferRequest(gomock.Any(), gomock.Any()).Return(nil)
+
 				transferSvc.EXPECT().TransferToUser(gomock.Any(), gomock.Any()).Return(&service.TransferToUserResponse{
 					OutBillNo:      core.String("plfk2020042013"),
 					TransferBillNo: core.String("1330000071100999991182020050700019480001"),
 					CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-					State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
-					PackageInfo:    core.String("affffddafdfafddffda=="),
+					State:          service.TRANSFERBILLSTATUS_WAIT_USER_CONFIRM.Ptr(),
+					PackageInfo:    core.String("PKo1234567890-20200420130000"),
 				}, nil)
 
 				return transferSvc
@@ -49,8 +52,8 @@ func TestInitiateTransfer(t *testing.T) {
 				OutBillNo:      core.String("plfk2020042013"),
 				TransferBillNo: core.String("1330000071100999991182020050700019480001"),
 				CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-				State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
-				PackageInfo:    core.String("affffddafdfafddffda=="),
+				State:          service.TRANSFERBILLSTATUS_WAIT_USER_CONFIRM.Ptr(),
+				PackageInfo:    core.String("PKo1234567890-20200420130000"),
 			},
 		},
 	}
@@ -63,16 +66,14 @@ func TestInitiateTransfer(t *testing.T) {
 			// 创建 userHandler 及所需的依赖 userService
 			server := gin.Default()
 			transferSvc := tc.mock(ctrl)
-			client := NewClient(
-				"wxb9f4f763e5d4a6de",               // appid
-				"1368139500",                       // mchid
-				"GFDS8j98rewnmgl45wHTt980jg512abc", // apiKey
-				"ajkhyuiKJSAHDn124fsadasda",        // certificateSerialNo
-				"certs/private_key.pem",            // privateKeyPath
-				"adsbvcretgnfsde",                  // wechatPayPublicKeyId
-				"certs/public_key.pem",             // wechatPayPublicKeyPath
-				"http://wepay.selfknow.cn",         // notifyUrl
+			MchConfig, _ := wxpay_utility.CreateMchConfig(
+				"1368139500",
+				"ajkhyuiKJSAHDn124fsadasda",
+				"certs/private_key.pem",
+				"adsbvcretgnfsde",
+				"certs/public_key.pem",
 			)
+			client := NewClient("wxb9f4f763e5d4a6de", MchConfig, "http://wepay.selfknow.cn")
 			transferHandler := NewTransferHandler(transferSvc, nil, client)
 			transferHandler.RegisterRoutes(server.Group("/transfer"))
 

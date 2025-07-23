@@ -1,25 +1,17 @@
 package web
 
+import "wepay/internal/service/wxpay_utility"
+
 type Client struct {
-	Appid                  string
-	Mchid                  string
-	ApiKey                 string
-	CertificateSerialNo    string
-	PrivateKeyPath         string
-	WechatPayPublicKeyId   string
-	WechatPayPublicKeyPath string
-	NotifyUrl              string
+	Appid     string
+	MchConfig *wxpay_utility.MchConfig
+	NotifyUrl string
 }
 
-func NewClient(appid, mchid, apiKey, certificateSerialNo, privateKeyPath, wechatPayPublicKeyId, wechatPayPublicKeyPath, notifyUrl string) Client {
+func NewClient(appid string, mchConfig *wxpay_utility.MchConfig, notifyUrl string) Client {
 	return Client{
-		Appid:                  appid,
-		Mchid:                  mchid,
-		ApiKey:                 apiKey,
-		CertificateSerialNo:    certificateSerialNo,
-		PrivateKeyPath:         privateKeyPath,
-		WechatPayPublicKeyId:   wechatPayPublicKeyId,
-		WechatPayPublicKeyPath: wechatPayPublicKeyPath,
-		NotifyUrl:              notifyUrl,
+		Appid:     appid,
+		MchConfig: mchConfig,
+		NotifyUrl: notifyUrl,
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"wepay/internal/domain"
@@ -55,45 +56,27 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": "参数不合法: " + err.Error()})
 		return
 	}
-	openid := req.Openid // 用户openid
-	amount := req.Amount // 转账金额，单位为 ”分“
-	remark := req.Remark // 转账备注
-	timeStr := req.Time  // 转账时间
 
-	// 商户的配置 MchConfig, appid， transfer_scene_id（转账场景）, notify_url（通知URL）, user_recv_perception（用户收款码）
-	transfer_scene_id := "1000" // 转账场景：现金营销
-
-	notify_url := t.client.NotifyUrl
+	// 商户的配置 transfer_scene_id（转账场景）,  user_recv_perception（用户收款码）
+	transfer_scene_id := "1000"    // 转账场景：现金营销
 	user_recv_perception := "现金红包" // 用户收款时感知到的收款原因将根据转账场景自动展示默认内容。
 
-	mchConfig, err := wxpay_utility.CreateMchConfig(
-		t.client.Mchid,
-		t.client.CertificateSerialNo,
-		t.client.PrivateKeyPath,
-		t.client.WechatPayPublicKeyId,
-		t.client.WechatPayPublicKeyPath,
-	)
-
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	// 生成唯一outbillno并保存转账请求
-	outbillno := t.svc.GenerateOutBillNo(openid, amount)
-	packageInfo := generatePackageInfo(openid, timeStr)
+	// 生成唯一outbillno, packageInfo并保存转账请求
+	outbillno := t.svc.GenerateOutBillNo(req.Openid, req.Amount)
+	packageInfo := generatePackageInfo(req.Openid, req.Time)
 	requestRecord := &domain.TransferRecord{
 		OutBillNo:   outbillno,
-		Openid:      openid,
-		MchId:       t.client.Mchid,
+		Openid:      req.Openid,
+		MchId:       t.client.MchConfig.MchId(),
 		PackageInfo: packageInfo,
-		Amount:      amount,
-		Remark:      remark,
+		Amount:      req.Amount,
+		Remark:      req.Remark,
 		Status:      domain.TransferStatusProcessing,
 	}
-	err = t.svc.AddTransferRequest(ctx, requestRecord)
+	err := t.svc.AddTransferRequest(ctx, requestRecord)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Println("add transfer request error:", err)
 		return
 	}
 
@@ -103,17 +86,17 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		Appid:              core.String(t.client.Appid), // 小程序与商户关联的appid
 		OutBillNo:          core.String(outbillno),
 		TransferSceneId:    core.String(transfer_scene_id),
-		Openid:             core.String(openid),
-		MchId:              core.String(t.client.Mchid),
-		UserName:           core.String(remark),
-		TransferAmount:     core.Int64(amount),
-		TransferRemark:     core.String(remark),
-		NotifyUrl:          core.String(notify_url),
+		Openid:             core.String(req.Openid),
+		MchId:              core.String(t.client.MchConfig.MchId()),
+		UserName:           core.String(req.Openid),
+		TransferAmount:     core.Int64(req.Amount),
+		TransferRemark:     core.String(req.Remark),
+		NotifyUrl:          core.String(t.client.NotifyUrl),
 		UserRecvPerception: core.String(user_recv_perception),
 	}
 
 	// 发起转账
-	_, err = t.svc.TransferToUser(mchConfig, request)
+	_, err = t.svc.TransferToUser(t.client.MchConfig, request)
 	if err != nil {
 		log.Println("post to wx error:", err)
 	}
@@ -121,7 +104,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		OutBillNo:      core.String(outbillno),
 		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
 		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-		State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
+		State:          service.TRANSFERBILLSTATUS_WAIT_USER_CONFIRM.Ptr(),
 		PackageInfo:    core.String(packageInfo),
 	}
 
@@ -158,17 +141,30 @@ type DecryptResult struct {
 }
 
 func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
-	// 1. 构造回调体
-	var resp struct {
+	// 1. 请求体
+	var req struct {
 		OutBillNo string `json:"out_bill_no"  binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&resp); err != nil {
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(400, gin.H{"code": "FAIL", "message": "invalid body"})
 		return
 	}
 
+	// 2. 校验回调请求
+	headers := ctx.Request.Header
+	body, err := io.ReadAll(ctx.Request.Body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+	err = wxpay_utility.ValidateResponse(t.client.MchConfig.WechatPayPublicKeyId(), t.client.MchConfig.WechatPayPublicKey(), &headers, body)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	// 更新	 requestRecord 状态
-	err := t.svc.UpdateTransferStatus(ctx, resp.OutBillNo, domain.TransferStatusWaitUserConfirm)
+	err = t.svc.UpdateTransferStatus(ctx, req.OutBillNo, domain.TransferStatusWaitUserConfirm)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 		return
