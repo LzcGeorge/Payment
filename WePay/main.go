@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gorm.io/gorm/logger"
 	"net/http"
 	"strings"
 	"time"
@@ -43,6 +44,7 @@ func initDB() *gorm.DB {
 	if err != nil {
 		panic(err)
 	}
+	db.Logger = logger.Default.LogMode(logger.Info)
 	return db
 }
 

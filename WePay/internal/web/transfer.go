@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"time"
 	"wepay/internal/domain"
 	"wepay/internal/service"
 	"wepay/internal/service/wxpay_utility"
@@ -31,8 +32,6 @@ func NewTransferHandler(svc service.TransferService, userSvc service.UserService
 	}
 }
 
-// RegisterRoutes registers the HTTP routes for transfer operations on the provided router group.
-// Currently, it registers a POST endpoint at "/to_user" that triggers the InitiateTransfer handler method.
 func (t *TransferHandler) RegisterRoutes(ug *gin.RouterGroup) {
 	ug.POST("/to_user", t.InitiateTransfer)
 	ug.POST("/notify", t.TransferNotify)   // 微信支付的回调（手动模拟实现）
@@ -44,6 +43,7 @@ func generatePackageInfo(openid string, timeStr string) string {
 	return fmt.Sprintf("PK%s-%s", openid, timeStr)
 }
 
+// 发起转账
 func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	// 用户传来的参数
 	var req struct {
@@ -104,11 +104,17 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		OutBillNo:      core.String(outbillno),
 		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
 		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-		State:          service.TRANSFERBILLSTATUS_WAIT_USER_CONFIRM.Ptr(),
+		State:          service.TRANSFERBILLSTATUS_PROCESSING.Ptr(),
 		PackageInfo:    core.String(packageInfo),
 	}
 
 	ctx.JSON(http.StatusOK, response)
+
+	go func() {
+		time.Sleep(10 * time.Second)
+		t.svc.UpdateTransferStatus(ctx, outbillno, domain.TransferStatusTransfering)
+	}()
+
 }
 
 type NotifyResp struct {
@@ -159,8 +165,8 @@ func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
 	}
 	err = wxpay_utility.ValidateResponse(t.client.MchConfig.WechatPayPublicKeyId(), t.client.MchConfig.WechatPayPublicKey(), &headers, body)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, err.Error())
-		return
+		// ctx.JSON(http.StatusInternalServerError, err.Error())
+		log.Println("validate response error:", err)
 	}
 
 	// 更新	 requestRecord 状态
@@ -235,9 +241,7 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
 	if record.Status == domain.TransferStatusWaitUserConfirm {
-		ctx.String(http.StatusOK, "")
 		// 如果状态为 TransferStatusWaitUserConfirm，则更新用户余额
-
 		err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, "")
@@ -252,7 +256,7 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusOK, gin.H{"message": "转账确认成功"})
 	} else {
-		ctx.String(http.StatusInternalServerError, "")
+		ctx.JSON(http.StatusInternalServerError, "")
 	}
 
 }
@@ -263,6 +267,7 @@ func (t *TransferHandler) FetchAmount(ctx *gin.Context) {
 	amount, err := t.userSvc.GetAmount(ctx, openid)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, 0)
+		return
 	}
 	ctx.JSON(http.StatusOK, amount)
 }
