@@ -1,10 +1,6 @@
 package web
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
-	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -69,6 +65,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	// 生成唯一outbillno, packageInfo并保存转账请求
 	outbillno := t.svc.GenerateOutBillNo(req.Openid, req.Amount)
 	packageInfo := generatePackageInfo(req.Openid, req.Time)
+	t.userSvc.UpsertUser(ctx, req.Openid)
 	requestRecord := &domain.TransferRecord{
 		OutBillNo:   outbillno,
 		Openid:      req.Openid,

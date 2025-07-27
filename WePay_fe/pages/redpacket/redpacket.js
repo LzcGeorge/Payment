@@ -3,7 +3,7 @@ Page({
     balance: 0,
     transferLogs: [],
     loading: false,
-    openid: 'test_openid_003', // 测试用，实际要用 wx.login 拿
+    openid: 'heihei', // 测试用，实际要用 wx.login 拿
     appid: 'wxb9f4f763e5d4a6de',
     mchid: '1368139500',
     transferResult : null,

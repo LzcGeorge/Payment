@@ -17,6 +17,8 @@ type User struct {
 type UserDao interface {
 	GetAmount(ctx context.Context, openid string) (int64, error)
 	UpsertBalance(ctx context.Context, openid string, amount int64) error
+	GetUser(ctx context.Context, openid string) (*User, error)
+	InsertUser(ctx context.Context, openid string) error
 }
 
 type GormUserDao struct {
@@ -47,4 +49,17 @@ func (d *GormUserDao) UpsertBalance(ctx context.Context, openid string, amount i
 			}),
 		}).
 		Create(&user).Error
+}
+
+func (d *GormUserDao) GetUser(ctx context.Context, openid string) (*User, error) {
+	var user User
+	err := d.db.Where("wx_open_id = ?", openid).First(&user).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &user, err
+}
+
+func (d *GormUserDao) InsertUser(ctx context.Context, openid string) error {
+	return d.db.Create(&User{WxOpenId: openid, Balance: 0}).Error
 }
