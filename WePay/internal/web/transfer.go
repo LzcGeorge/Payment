@@ -71,6 +71,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 	// 生成唯一outbillno, packageInfo并保存转账请求
 	outbillno := t.svc.GenerateOutBillNo(req.Openid, req.Amount)
 	packageInfo := generatePackageInfo(req.Openid, req.Time)
+	//
 	t.userSvc.UpsertUser(ctx, req.Openid)
 	requestRecord := &domain.TransferRecord{
 		OutBillNo:   outbillno,
@@ -79,7 +80,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		PackageInfo: packageInfo,
 		Amount:      req.Amount,
 		Remark:      req.Remark,
-		Status:      domain.TransferStatusProcessing,
+		Status:      domain.TransferStatusAccepted,
 	}
 	log.Println("outbillno", outbillno)
 	err := t.svc.AddTransferRequest(ctx, requestRecord)
@@ -215,11 +216,11 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
 
-	// 唤醒 confirm 的协程
+	// 唤醒 confirm 的通道
 	t.confirmChans.Store(record.OutBillNo, make(chan struct{}))
 	log.Println("confirm 来了")
 
-	// 等待 notify 传来消息
+	// 等待 notify 传来消息，限定在 10 s 内返回结果
 	timeout := time.After(10 * time.Second)
 	interval := 1 * time.Second
 	for {
