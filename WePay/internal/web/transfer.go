@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 	"wepay/internal/domain"
 	"wepay/internal/service"
@@ -19,16 +20,20 @@ import (
 )
 
 type TransferHandler struct {
-	svc     service.TransferService
-	userSvc service.UserService
-	client  Client
+	svc          service.TransferService
+	userSvc      service.UserService
+	client       Client
+	notifyChans  sync.Map // map[string]chan struct{}
+	confirmChans sync.Map // map[string]chan struct{}
 }
 
 func NewTransferHandler(svc service.TransferService, userSvc service.UserService, client Client) *TransferHandler {
 	return &TransferHandler{
-		svc:     svc,
-		userSvc: userSvc,
-		client:  client,
+		svc:          svc,
+		userSvc:      userSvc,
+		client:       client,
+		notifyChans:  sync.Map{},
+		confirmChans: sync.Map{},
 	}
 }
 
@@ -73,6 +78,7 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		Remark:      req.Remark,
 		Status:      domain.TransferStatusProcessing,
 	}
+	log.Println("outbillno", outbillno)
 	err := t.svc.AddTransferRequest(ctx, requestRecord)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -104,15 +110,15 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		OutBillNo:      core.String(outbillno),
 		TransferBillNo: core.String("1330000071100999991182020050700019480001"),
 		CreateTime:     core.String("2015-05-20T13:29:35.120+08:00"),
-		State:          service.TRANSFERBILLSTATUS_PROCESSING.Ptr(),
+		State:          service.TRANSFERBILLSTATUS_ACCEPTED.Ptr(),
 		PackageInfo:    core.String(packageInfo),
 	}
 
 	ctx.JSON(http.StatusOK, response)
 
 	go func() {
-		time.Sleep(10 * time.Second)
-		t.svc.UpdateTransferStatus(ctx, outbillno, domain.TransferStatusTransfering)
+		time.Sleep(5 * time.Second)
+		t.svc.UpdateTransferStatus(ctx, outbillno, domain.TransferStatusWaitUserConfirm)
 	}()
 
 }
@@ -169,57 +175,21 @@ func (t *TransferHandler) TransferNotify(ctx *gin.Context) {
 		log.Println("validate response error:", err)
 	}
 
-	// 更新	 requestRecord 状态
-	err = t.svc.UpdateTransferStatus(ctx, req.OutBillNo, domain.TransferStatusWaitUserConfirm)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, err.Error())
+	// 是否有确认转账的请求
+	_, ok := t.confirmChans.Load(req.OutBillNo)
+	if !ok {
+		log.Println("wait confirm")
+		ctx.JSON(http.StatusOK, gin.H{"message": "wait confirm"})
 		return
 	}
 
+	// 唤醒 notify 的协程
+	defer func() {
+		t.notifyChans.Store(req.OutBillNo, make(chan struct{}))
+		log.Println("notify 唤醒")
+	}()
+
 	ctx.String(http.StatusOK, "")
-}
-
-// 解密 AES-256-GCM 回调
-// apiV3Key 必须是 32 字节字符串
-func DecryptNotifyResource(apiV3Key, associatedData, nonce, ciphertext string) (string, error) {
-	jsonStr := `{
-		"out_bill_no": "plfk2020042013",
-		"transfer_bill_no":"1330000071100999991182020050700019480001",
-		"state": "SUCCESS",
-		"mch_id": "1900001109",
-		"transfer_amount": 2000,
-		"openid": "o-MYE421800elYMDE34nYD456Xoy",
-		"fail_reason": "PAYEE_ACCOUNT_ABNORMAL",
-		"create_time": "2015-05-20T13:29:35+08:00",
-		"update_time": "2023-08-15T20:33:22+08:00"
-	}`
-	return jsonStr, nil
-	key := []byte(apiV3Key)
-	if len(key) != 32 {
-		return "", errors.New("无效的ApiV3Key，长度必须为32个字节")
-	}
-
-	nonceBytes := []byte(nonce)
-	aad := []byte(associatedData)
-	ct, err := base64.StdEncoding.DecodeString(ciphertext)
-	if err != nil {
-		return "", err
-	}
-
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return "", err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return "", err
-	}
-
-	plain, err := gcm.Open(nil, nonceBytes, ct, aad)
-	if err != nil {
-		return "", err
-	}
-	return string(plain), nil
 
 }
 
@@ -236,27 +206,58 @@ func (t *TransferHandler) ConfirmTransfer(ctx *gin.Context) {
 		return
 	}
 
+	// 获取转账记录
 	record, err := t.svc.GetTransferRecordByPackageInfo(ctx, req.PackageInfo)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, err.Error())
 	}
-	if record.Status == domain.TransferStatusWaitUserConfirm {
-		// 如果状态为 TransferStatusWaitUserConfirm，则更新用户余额
-		err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, "")
-			log.Printf("更新用户余额失败: %v", err)
+
+	// 唤醒 confirm 的协程
+	t.confirmChans.Store(record.OutBillNo, make(chan struct{}))
+	log.Println("confirm 来了")
+
+	// 等待 notify 传来消息
+	timeout := time.After(10 * time.Second)
+	interval := 1 * time.Second
+	for {
+		select {
+		case <-timeout:
+			ctx.JSON(http.StatusRequestTimeout, gin.H{"message": "超时未收到回调"})
+			log.Println("超时未收到回调")
 			return
+		default:
+			log.Println("wait notify")
+			ch, ok := t.notifyChans.Load(record.OutBillNo)
+			if ok {
+				close(ch.(chan struct{}))
+				t.notifyChans.Delete(record.OutBillNo)
+				// notify 来了
+				log.Println("notify 来了")
+				if record.Status == domain.TransferStatusWaitUserConfirm {
+					// 如果状态为 TransferStatusWaitUserConfirm，则更新用户余额
+					err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
+					if err != nil {
+						ctx.JSON(http.StatusInternalServerError, "")
+						log.Printf("更新用户余额失败: %v", err)
+						return
+					}
+					err = t.svc.UpdateTransferStatus(ctx, record.OutBillNo, domain.TransferStatusSuccess)
+					if err != nil {
+						ctx.JSON(http.StatusInternalServerError, "")
+						log.Printf("更新转账状态失败: %v", err)
+						return
+					}
+					ctx.JSON(http.StatusOK, gin.H{"message": "转账确认成功"})
+					return
+				} else {
+					ctx.JSON(http.StatusInternalServerError, "转账状态不正确")
+					log.Println("转账状态不正确")
+					return
+				}
+			} else {
+				time.Sleep(interval)
+			}
 		}
-		err = t.svc.UpdateTransferStatus(ctx, record.OutBillNo, domain.TransferStatusSuccess)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, "")
-			log.Printf("更新转账状态失败: %v", err)
-			return
-		}
-		ctx.JSON(http.StatusOK, gin.H{"message": "转账确认成功"})
-	} else {
-		ctx.JSON(http.StatusInternalServerError, "")
 	}
 
 }

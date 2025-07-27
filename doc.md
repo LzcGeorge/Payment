@@ -17,40 +17,54 @@
 
 ## 整体架构
 
-![image-20250723114009646](./img/image-20250723114009646.png)
+![image-20250727180047250](./img/image-20250727180047250.png)
 
- **1. 用户发起红包签到**
+**通俗易懂版本：**
 
-- 用户在微信小程序内点击“红包签到”，发起签到请求。
-- 小程序向 **商户**（后端）发起 `/transfer/to_user` 接口请求。
+1. 小明点击红包签到（ 小程序向商户发送 `/transfer/to_user` 请求）
+2. 商户接受到请求，
+    - 处理请求，保存转账记录
+    - 向 **微信平台** 发送转账请求 `/mch-transfer/transfer-bills` ，返回 `package_info` 和 `state`
+    - 依据 `state` ，向用户返回结果
+3. 小明看到收款确认信息
+    - 确认收款，向 **微信平台** 发送确认收款 `/requestMerchantTransfer` 
+    - **微信平台** 收到确认请求后，向 **商户** 发送回调 `/transfer/notify`
+    - **商户** 收到回调后，根据 `state` 进行后续操作（修改数据库中的状态），返回给 **用户** 转账结果。
 
- **2. 商户服务器处理转账**
-
-- 商户服务器接收到请求，生成 ==转账单号==，保存请求，调用微信商户转账API，转账到用户零钱。
-- 微信平台处理转账，立即返回一个受理响应（同步），响应中携带 ==package_info==（用于后续收款拉起）。
-
- **3. 返回结果给用户**
-
-- 商户服务器将转账请求的受理结果（包含package_info）返回给小程序端，前端可以用它拉起收款页面，提示用户“签到成功”。
-
- **4. 微信平台异步回调通知（Notify）**
-
-- 微信平台**转账处理完成后**，会异步回调商户的 `/transfer/notify` 接口，推送转账单据终态（如转账成功、失败、撤销）。
-- 商户服务器接收到回调，首先**验签**（保证消息来源可靠），然后根据通知内容**修改本地转账记录状态**（置为“Success”）。
-
- **5. 用户确认收款**
-
-- 用户在微信收款页面点击**确认收款**，小程序端可以调用 requestMerchantTransfer 拉起收款界面。(模拟调用的是商户的 `/transfer/confirm` 接口)
-- 收款完成后，返回结果给用户，用户的余额增加。
+> 详细版：
+>
+> 1. 用户发起红包签到
+>
+> - 用户在微信小程序内点击“红包签到”，发起签到请求。
+> - 小程序向 **商户**（后端）发起 `/transfer/to_user` 接口请求。
+>
+> 2. 商户服务器处理转账
+>
+> - 商户服务端接收到请求，生成 **转账单号**，保存转账记录，调用微信商户转账API `mch-transfer/transfer-bills`，转账到用户零钱。
+> - 微信平台处理转账，立即返回一个受理响应（同步），响应中携带 `package_info`（用于后续收款拉起）,`state`(商家转账订单状态）。
+> - 当返回的商家转账订单状态为 `WAIT_USER_CONFIRM` 时，用户可以调用确认收款
+>
+> 3. 用户确认收款
+>
+> - 用户看到确认收款后，进行 **确认收款**
+> - 小程序向 **微信平台** 发起 `requestMerchantTransfer` 接口请求
+>
+> 4. 微信和商户处理收款
+>
+> - 微信平台收到确认收款请求后，将转账结果通知给 **商户**
+> - 微信平台利用之前 **商户发起转账的携带** `notify_url` 参数，进行回调（notify）
+> - 商户服务器接收到回调，首先**验签**（保证消息来源可靠），然后根据通知内容**修改本地转账记录状态**（置为“Success”）。
+> - 商户向微信平台返回状态码(`http.StatusOK`)
+> - 商户根据转账状态，进行后续操作（修改转账记录表中的状态），返回用户结果。
 
 ### 技术栈
 
 - 采用 **DDD（领域驱动设计） 架构**，项目分为 Domain、Repository、Service、Web 层，**实现业务逻辑与基础设施的解耦**，支持模块化扩展和后期重构。 设计原则：单一职责，依赖注入（DI），接口封装
-- 后端：采用 ==Gin== 作为 Web 框架，具有路由和中间件支持，开发效率高
-- 前端：==微信小程序== ，利用微信的原生API 支持
-- 数据库：==MySQL==，存储转账记录、用户等信息
-- 单元测试：==Mock==
-- 版本管理：使用 ==Github== 进行版本管理
+- 后端：采用 `Gin` 作为 Web 框架，具有路由和中间件支持，开发效率高
+- 前端：`微信小程序` ，利用微信的原生API 支持
+- 数据库：`MySQL`，存储转账记录、用户等信息
+- 单元测试：`Mock`
+- 版本管理：使用 `Github` 进行版本管理
 
 ## 主要功能
 
@@ -127,17 +141,17 @@ type MchConfig struct {
 
 #### 发起转账
 
-发起转账 ：`func (*t* *TransferHandler) InitiateTransfer(*ctx* *gin.Context) ` 
+发起转账 ：`func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) ` 
 
 - 输入：Openid，Amount（转账金额），Remark（备注），Time（时间戳）
 - 步骤
     1. 校验参数完整性，完善其他参数设置
-    2. 生成 ==OutBillNo（商户单号）== 
-    3. 生成 ==packageInfo== (原本应该是调用微信商户转账API 的 Response 中的，这里模拟，直接商户端生成了)
+    2. 生成 `OutBillNo（商户单号）` 
+    3. 生成 `packageInfo` (原本应该是调用微信商户转账API 的 Response 中的，这里模拟，直接商户端生成了)
     4. 保存下转账记录（落库）
     5. 构造微信商户转账需要的 TransferToUserRequest 对象，调用 API 接口
-    6. **立即（同步）**返回一个组装好的 TransferToUserResponse 对象，此处的转账状态为 ==TransferStatusProcessing==
-    7. **异步修改转账状态** 为 ==TransferStatusTransfering==，表示微信平台正在处理转账
+    6. **立即（同步）**返回一个组装好的 TransferToUserResponse 对象，此处的转账状态为 `TransferStatusProcessing`
+    7. **异步修改转账状态** 为 `TransferStatusTransfering`，表示微信平台正在处理转账
 
 核心代码：
 
@@ -178,7 +192,7 @@ go func() {
 - 步骤
     1. 接收和校验参数
     2. 调用 **`wxpay_utility.ValidateResponse`** 对微信回调进行验签，防止伪造
-    3. 更新转账状态为 ==WaitUserConfirm==， 等待用户确认收款
+    3. 更新转账状态为 `WaitUserConfirm`， 等待用户确认收款
     4. 返回 `Http.StatusOK` ,告诉微信已成功接收通知。
 
 核心代码：
@@ -215,8 +229,8 @@ err = t.svc.UpdateTransferStatus(ctx, req.OutBillNo, domain.TransferStatusWaitUs
 - 输入：Mchid，Appid，PackageInfo
 - 步骤
     1. 接收参数并校验
-    2. 根据小程序传过来的 ==PackageInfo== 调用 GetTransferRecordByPackageInfo 拿到对应的转账记录
-    3. 转账记录上的状态为 ==TransferStatusWaitUserConfirm== ，则更新余额，更新转账记录的状态为 ==TransferStatusSuccess==
+    2. 根据小程序传过来的 `PackageInfo` 调用 GetTransferRecordByPackageInfo 拿到对应的转账记录
+    3. 转账记录上的状态为 `TransferStatusWaitUserConfirm` ，则更新余额，更新转账记录的状态为 `TransferStatusSuccess`
     4. 否则，返回失败。
 
 核心代码
@@ -234,7 +248,7 @@ if err := ctx.ShouldBind(&req); err != nil {
 // 获取转账记录
 record, err := t.svc.GetTransferRecordByPackageInfo(ctx, req.PackageInfo)
 
-if record.Status == domain.TransferStatusWaitUserConfirm {
+if record.Status ` domain.TransferStatusWaitUserConfirm {
     // 如果状态为 TransferStatusWaitUserConfirm，则更新用户余额
     err := t.userSvc.UpdateBalance(ctx, record.Openid, record.Amount)
     if err != nil {
@@ -263,7 +277,7 @@ if record.Status == domain.TransferStatusWaitUserConfirm {
 ![image-20250723171332238](./img/image-20250723171332238.png)
 
 1. 用户在小程序端点“红包签到”，触发该请求。
-2. 后端 `/transfer/to_user` 接口收到参数，发起一笔转账业务，并返回唯一的 ==package_info== 标识。
+2. 后端 `/transfer/to_user` 接口收到参数，发起一笔转账业务，并返回唯一的 `package_info` 标识。
 3. 前端拿到 package_info，后续可用于 **确认转账**
 
 ```js
@@ -308,9 +322,9 @@ wx.request({
 
 学到了很多东西，在这个过程中不断地发现问题，解决问题，又发现问题，又解决问题.... 能力慢慢得到了提高，对业务的理解又提高了一个认识，同时也有一些感想。
 
-==完成优先于完美== ：先简单的跑起来，然后再去做细节上的调整
+`完成优先于完美` ：先简单的跑起来，然后再去做细节上的调整
 
-==不谋全局者，不足以谋一域==：刚开始做的时候，想着先实现一个功能，后面的整体框架以后再说。做着做着就在想这个应该放在哪，那个应该放在哪，逻辑慢慢的就搞混了。 后面就重新梳理思路，把整个框架梳理清楚之后，再去逐步实现代码。
+`不谋全局者，不足以谋一域`：刚开始做的时候，想着先实现一个功能，后面的整体框架以后再说。做着做着就在想这个应该放在哪，那个应该放在哪，逻辑慢慢的就搞混了。 后面就重新梳理思路，把整个框架梳理清楚之后，再去逐步实现代码。
 
 
 
