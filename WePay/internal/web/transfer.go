@@ -58,6 +58,12 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		return
 	}
 
+	// 校验 Amount 是否合法
+	if req.Amount <= 0 || req.Amount > 50 {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "金额不合法"})
+		return
+	}
+
 	// 商户的配置 transfer_scene_id（转账场景）,  user_recv_perception（用户收款码）
 	transfer_scene_id := "1000"    // 转账场景：现金营销
 	user_recv_perception := "现金红包" // 用户收款时感知到的收款原因将根据转账场景自动展示默认内容。
@@ -111,12 +117,12 @@ func (t *TransferHandler) InitiateTransfer(ctx *gin.Context) {
 		PackageInfo:    core.String(packageInfo),
 	}
 
-	ctx.JSON(http.StatusOK, response)
-
 	go func() {
 		time.Sleep(5 * time.Second)
 		t.svc.UpdateTransferStatus(ctx, outbillno, domain.TransferStatusWaitUserConfirm)
 	}()
+
+	ctx.JSON(http.StatusOK, response)
 
 }
 
